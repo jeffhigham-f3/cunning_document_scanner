@@ -263,6 +263,62 @@ void main() {
       expect(passedOptions!['showFilterBar'], isFalse);
     });
 
+    testWidgets('getPictures sends the requested captureFilter',
+        (WidgetTester tester) async {
+      const MethodChannel channel = MethodChannel('cunning_document_scanner');
+
+      String? passedFilter;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (MethodCall methodCall) {
+          passedFilter =
+              (methodCall.arguments as Map)['captureFilter'] as String?;
+          return Future.value(<String>['fake_url']);
+        },
+      );
+
+      await CunningDocumentScanner.getPictures(
+        captureFilter: DocumentFilter.blackAndWhite,
+      );
+
+      expect(passedFilter, equals('blackAndWhite'));
+    });
+
+    testWidgets('getPictures sends original when no captureFilter is given',
+        (WidgetTester tester) async {
+      const MethodChannel channel = MethodChannel('cunning_document_scanner');
+
+      String? passedFilter;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        (MethodCall methodCall) {
+          passedFilter =
+              (methodCall.arguments as Map)['captureFilter'] as String?;
+          return Future.value(<String>['fake_url']);
+        },
+      );
+
+      await CunningDocumentScanner.getPictures();
+
+      expect(passedFilter, equals('original'));
+    });
+
+    test('every DocumentFilter has a distinct method channel value', () {
+      final values =
+          DocumentFilter.values.map((f) => f.methodChannelValue).toSet();
+      expect(values, hasLength(DocumentFilter.values.length));
+      expect(
+          values,
+          containsAll(
+              <String>['original', 'color', 'grayscale', 'blackAndWhite']));
+    });
+
+    test('IosDocumentFilter still names the same filters', () {
+      // ignore: deprecated_member_use_from_same_package
+      expect(
+          IosDocumentFilter.blackAndWhite, same(DocumentFilter.blackAndWhite));
+    });
+
     test('IosScannerOptions rejects an out-of-range compression quality', () {
       expect(
         () => IosScannerOptions(jpgCompressionQuality: 1.5),

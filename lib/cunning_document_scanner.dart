@@ -2,6 +2,7 @@
 
 export 'src/cunning_document_scanner.dart';
 export 'src/android_scanner_mode.dart';
+export 'src/document_filter.dart';
 export 'src/exceptions.dart';
 export 'src/ios_document_filter.dart';
 export 'src/ios_image_format.dart';

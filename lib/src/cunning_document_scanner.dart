@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'android_scanner_mode.dart';
+import 'document_filter.dart';
 import 'exceptions.dart';
 import 'ios_scanner_options.dart';
 import 'scanner_source.dart';
@@ -29,6 +30,12 @@ class CunningDocumentScanner {
   /// [androidScannerMode] controls the ML Kit scanner mode on Android only.
   /// [iosScannerOptions] is a set of options for the iOS scanner.
   /// [asPdf] is a flag that indicates if the scanned pages should be compiled and returned as a single PDF file path.
+  /// [captureFilter] is applied to every page the camera flows return, on both
+  /// platforms, after the platform's own crop and after any filter the user
+  /// picked in the system camera. On Android it also covers gallery imports,
+  /// whose cropper has no filter of its own; on iOS gallery imports use
+  /// [IosScannerOptions.defaultFilter]. The default, [DocumentFilter.original],
+  /// returns the captured bytes untouched.
   ///
   /// Returns a list of paths to the scanned images, or null if the user cancels
   /// the operation. Cancellation reports null on every platform.
@@ -51,6 +58,7 @@ class CunningDocumentScanner {
     AndroidScannerMode androidScannerMode = AndroidScannerMode.full,
     IosScannerOptions? iosScannerOptions,
     bool asPdf = false,
+    DocumentFilter captureFilter = DocumentFilter.original,
   }) async {
     if (noOfPages <= 0) {
       throw ArgumentError.value(
@@ -73,6 +81,7 @@ class CunningDocumentScanner {
         'scannerSource': resolvedSource.methodChannelValue,
         'androidScannerMode': androidScannerMode.methodChannelValue,
         'asPdf': asPdf,
+        'captureFilter': captureFilter.methodChannelValue,
         if (iosScannerOptions != null)
           'iosScannerOptions': iosScannerOptions.toMap(),
       });
