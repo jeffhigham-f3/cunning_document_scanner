@@ -10,6 +10,7 @@ import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import biz.cunning.cunning_document_scanner.DocumentFilter
 import biz.cunning.cunning_document_scanner.R
 import biz.cunning.cunning_document_scanner.fallback.constants.DefaultSetting
 import biz.cunning.cunning_document_scanner.fallback.constants.DocumentScannerExtra
@@ -25,6 +26,7 @@ import biz.cunning.cunning_document_scanner.fallback.ui.ImageCropView
 import biz.cunning.cunning_document_scanner.fallback.utils.CameraUtil
 import biz.cunning.cunning_document_scanner.fallback.utils.FileUtil
 import biz.cunning.cunning_document_scanner.fallback.utils.ImageUtil
+import biz.cunning.cunning_document_scanner.fallback.utils.PageFilter
 import java.io.File
 import java.util.concurrent.Executors
 
@@ -53,6 +55,9 @@ class DocumentScannerActivity : AppCompatActivity() {
 
     // / The 0 - 100 quality of the cropped image.
     private var croppedImageQuality = DefaultSetting.CROPPED_IMAGE_QUALITY
+
+    // / The filter applied to every cropped page before it is written.
+    private var captureFilter = DocumentFilter.ORIGINAL
 
     // / Default offset margin used when document corners are not detected.
     private val cropperOffsetWhenCornersNotFound = 100.0
@@ -178,6 +183,11 @@ class DocumentScannerActivity : AppCompatActivity() {
                 }
                 croppedImageQuality = it
             }
+
+            captureFilter =
+                DocumentFilter.fromMethodChannel(
+                    intent.getStringExtra(DocumentScannerExtra.EXTRA_CAPTURE_FILTER),
+                )
         } catch (exception: Exception) {
             finishIntentWithError(
                 "invalid extra: ${exception.message}",
@@ -413,8 +423,10 @@ class DocumentScannerActivity : AppCompatActivity() {
 
                         File(document.originalPhotoFilePath).delete()
 
+                        val filteredImage = PageFilter().apply(croppedImage, captureFilter)
                         val croppedImageFile = FileUtil().createImageFile(this, pageNumber)
-                        croppedImage.saveToFile(croppedImageFile, croppedImageQuality)
+                        filteredImage.saveToFile(croppedImageFile, croppedImageQuality)
+                        if (filteredImage != croppedImage) filteredImage.recycle()
                         croppedImage.recycle()
                         croppedImageResults.add(Uri.fromFile(croppedImageFile).toString())
                     }

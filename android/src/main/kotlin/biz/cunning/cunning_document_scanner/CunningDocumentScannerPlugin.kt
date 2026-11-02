@@ -7,10 +7,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.ActivityCompat
 import biz.cunning.cunning_document_scanner.fallback.DocumentScannerActivity
 import biz.cunning.cunning_document_scanner.fallback.constants.DocumentScannerExtra
 import biz.cunning.cunning_document_scanner.fallback.utils.FileUtil
+import biz.cunning.cunning_document_scanner.fallback.utils.PageFilter
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_PDF
@@ -26,6 +29,7 @@ import io.flutter.plugin.common.MethodChannel.Result
 import io.flutter.plugin.common.PluginRegistry
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.Executors
 
 // / Main Android plugin class for cunning_document_scanner.
 // / Handles Flutter MethodChannel calls, Google Play Services (GMS) document scanner triggers,
@@ -49,6 +53,16 @@ class CunningDocumentScannerPlugin :
 
     // / Maximum number of pages requested for the in-flight scan.
     private var noOfPages: Int = DEFAULT_NO_OF_PAGES
+
+    // / The filter requested for every page of the in-flight scan.
+    private var captureFilter: DocumentFilter = DocumentFilter.ORIGINAL
+
+    // / Runs the page filtering off the main thread. The ML Kit result arrives on the
+    // / main thread, and decoding and filtering a full page there would freeze the UI.
+    private val filterExecutor = Executors.newSingleThreadExecutor()
+
+    // / A `MethodChannel.Result` must be completed on the main thread.
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // / The current Android activity instance, or null while detached.
     private var activity: Activity? = null
@@ -108,6 +122,7 @@ class CunningDocumentScannerPlugin :
 
         this.noOfPages = call.argument<Int>("noOfPages") ?: DEFAULT_NO_OF_PAGES
         this.asPdf = call.argument<Boolean>("asPdf") ?: false
+        this.captureFilter = DocumentFilter.fromMethodChannel(call.argument<String>("captureFilter"))
         this.pendingResult = result
 
         val scannerSource =
@@ -173,6 +188,7 @@ class CunningDocumentScannerPlugin :
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
         applicationContext = null
+        filterExecutor.shutdown()
     }
 
     // / Called when the plugin is attached to the host Activity.
@@ -233,6 +249,7 @@ class CunningDocumentScannerPlugin :
                     ArrayList(limitedUris.map { it.toString() }),
                 )
                 putExtra(DocumentScannerExtra.EXTRA_MAX_NUM_DOCUMENTS, limitedUris.size)
+                putExtra(DocumentScannerExtra.EXTRA_CAPTURE_FILTER, captureFilter.methodChannelValue)
             }
 
         try {
@@ -304,8 +321,9 @@ class CunningDocumentScannerPlugin :
             return
         }
 
+        val filter = captureFilter
         try {
-            if (asPdf) {
+            if (asPdf && filter == DocumentFilter.ORIGINAL) {
                 val pdfUri = scanningResult.pdf?.uri
                 if (pdfUri != null) {
                     val pdfFile = FileUtil().movePdfToScanStorage(context, pdfUri)
@@ -313,15 +331,61 @@ class CunningDocumentScannerPlugin :
                 } else {
                     fail("ERROR", "No PDF returned from ML Kit scanner")
                 }
-            } else {
-                val successResponse =
-                    scanningResult.pages.orEmpty().mapIndexed { index, page ->
-                        FileUtil().movePageToScanStorage(context, page.imageUri, index).absolutePath
-                    }
-                resolve(successResponse)
+                return
             }
+
+            val pageFiles =
+                scanningResult.pages.orEmpty().mapIndexed { index, page ->
+                    FileUtil().movePageToScanStorage(context, page.imageUri, index)
+                }
+            if (filter == DocumentFilter.ORIGINAL) {
+                resolve(pageFiles.map { it.absolutePath })
+                return
+            }
+            filterPagesThenResolve(pageFiles, filter, asPdf)
         } catch (e: IOException) {
             fail("ERROR", "Failed to persist ML Kit scanner output: ${e.message}")
+        }
+    }
+
+    // / Applies the requested filter to each moved page off the main thread, then
+    // / resolves with the page paths, or with one PDF built from the filtered pages.
+    // /
+    // / ML Kit's own PDF cannot be filtered after the fact, so when a filter is
+    // / requested the scan asks ML Kit for JPEG pages and builds the PDF here, the
+    // / same way the fallback scanner already does for `asPdf`.
+    private fun filterPagesThenResolve(
+        pageFiles: List<File>,
+        filter: DocumentFilter,
+        asPdf: Boolean,
+    ) {
+        val currentActivity = activity
+        if (asPdf && currentActivity == null) {
+            fail("NO_ACTIVITY", "Plugin is not attached to an Activity")
+            return
+        }
+
+        filterExecutor.execute {
+            // `Result` in this file is Flutter's MethodChannel.Result, so Kotlin's is named in full.
+            val outcome: kotlin.Result<List<String>> =
+                try {
+                    pageFiles.forEach { PageFilter().applyToFile(it, filter) }
+                    if (asPdf && currentActivity != null) {
+                        val pdfFile = FileUtil().createPdfFile(currentActivity)
+                        FileUtil().convertImagesToPdf(pageFiles.map { it.absolutePath }, pdfFile)
+                        pageFiles.forEach { it.delete() }
+                        kotlin.Result.success(listOf(pdfFile.absolutePath))
+                    } else {
+                        kotlin.Result.success(pageFiles.map { it.absolutePath })
+                    }
+                } catch (e: Exception) {
+                    kotlin.Result.failure(e)
+                }
+            mainHandler.post {
+                outcome
+                    .onSuccess { resolve(it) }
+                    .onFailure { fail("ERROR", "Failed to filter ML Kit scanner output: ${it.message}") }
+            }
         }
     }
 
@@ -397,6 +461,10 @@ class CunningDocumentScannerPlugin :
             DocumentScannerExtra.EXTRA_MAX_NUM_DOCUMENTS,
             noOfPages,
         )
+        documentScanIntent.putExtra(
+            DocumentScannerExtra.EXTRA_CAPTURE_FILTER,
+            captureFilter.methodChannelValue,
+        )
 
         return documentScanIntent
     }
@@ -421,7 +489,9 @@ class CunningDocumentScannerPlugin :
                 .setPageLimit(noOfPages)
                 .setScannerMode(scannerMode)
 
-        if (asPdf) {
+        // A filtered PDF is built from filtered JPEG pages, so only an unfiltered scan
+        // asks ML Kit for the PDF itself.
+        if (asPdf && captureFilter == DocumentFilter.ORIGINAL) {
             optionsBuilder.setResultFormats(RESULT_FORMAT_PDF)
         } else {
             optionsBuilder.setResultFormats(RESULT_FORMAT_JPEG)

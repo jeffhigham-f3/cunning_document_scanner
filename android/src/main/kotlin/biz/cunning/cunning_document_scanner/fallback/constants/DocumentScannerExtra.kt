@@ -9,6 +9,10 @@ class DocumentScannerExtra {
         // / Intent extra key for the maximum number of pages allowed.
         const val EXTRA_MAX_NUM_DOCUMENTS = "maxNumDocuments"
 
+        // / Intent extra key for the filter applied to every cropped page, as its
+        // / method channel value. Absent means the page is left as cropped.
+        const val EXTRA_CAPTURE_FILTER = "captureFilter"
+
         // / Intent extra key holding the gallery image URIs to crop, as an ArrayList<String>.
         const val EXTRA_IMAGE_URIS_TO_CROP = "imageUrisToCrop"
 
