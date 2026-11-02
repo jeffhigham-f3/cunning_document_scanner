@@ -39,6 +39,7 @@ class ExampleStrings {
   String get androidFull => _strings['androidFull']!;
   String get androidBase => _strings['androidBase']!;
   String get androidBaseWithFilter => _strings['androidBaseWithFilter']!;
+  String get captureFilter => _strings['captureFilter']!;
   String get iosFilter => _strings['iosFilter']!;
   String get showFilterBar => _strings['showFilterBar']!;
   String get showFilterBarSubtitle => _strings['showFilterBarSubtitle']!;
@@ -73,6 +74,7 @@ class ExampleStrings {
       'androidFull': 'Full (ML Enhancements & Filters)',
       'androidBase': 'Base (No Filters)',
       'androidBaseWithFilter': 'Base with Filter',
+      'captureFilter': 'Capture filter (camera, both platforms)',
       'iosFilter': 'Default Cropper Filter (iOS Only)',
       'showFilterBar': 'Show filter bar (iOS Only)',
       'showFilterBarSubtitle':
@@ -104,6 +106,7 @@ class ExampleStrings {
       'androidFull': 'Completo (mejoras ML y filtros)',
       'androidBase': 'Básico (sin filtros)',
       'androidBaseWithFilter': 'Básico con filtro',
+      'captureFilter': 'Filtro de captura (cámara, ambas plataformas)',
       'iosFilter': 'Filtro por defecto del recorte (solo iOS)',
       'showFilterBar': 'Mostrar barra de filtros (solo iOS)',
       'showFilterBarSubtitle':
@@ -135,6 +138,7 @@ class ExampleStrings {
       'androidFull': 'Полный (ML-улучшения и фильтры)',
       'androidBase': 'Базовый (без фильтров)',
       'androidBaseWithFilter': 'Базовый с фильтром',
+      'captureFilter': 'Фильтр съёмки (камера, обе платформы)',
       'iosFilter': 'Фильтр по умолчанию (только iOS)',
       'showFilterBar': 'Показывать панель фильтров (только iOS)',
       'showFilterBarSubtitle':

@@ -1,3 +1,13 @@
+## 3.1.0
+
+### Added
+* **A requested filter on every camera capture, on both platforms.** `getPictures` takes a `captureFilter` (`DocumentFilter.original`, `.color`, `.grayscale` or `.blackAndWhite`) and applies it to every page the camera flows return, after the platform's own crop and after whatever filter the user picked in the system camera. Neither Apple's document camera nor ML Kit's scanner lets an app preset its filter, so an app that wants every scan in black and white no longer depends on the user choosing it by hand each time. `original`, the default, returns the captured bytes exactly as before. On Android the filter also covers gallery imports, whose cropper has no filter of its own; on iOS gallery imports keep `IosScannerOptions.defaultFilter`.
+* **Android filters.** The Android side had no filter code at all. It now applies the same colour, grayscale and black and white conversions as iOS, to ML Kit pages and to the fallback scanner's pages alike. A filtered `asPdf` scan is built from the filtered pages, since ML Kit's own PDF cannot be filtered after the fact.
+
+### Changed
+* **`blackAndWhite` is now a black and white page.** It used to be a high-contrast grayscale. The page's lighting is flattened against a blurred copy of itself, so shadows, folds and faded paper come out as uniform background, and the result is thresholded to pure black and white. The iOS gallery cropper's B&W changes look accordingly. On iOS 13 the threshold filter does not exist and the previous look is kept.
+* **`IosDocumentFilter` is deprecated** in favour of the platform-neutral `DocumentFilter`; it remains as a typedef, so existing code compiles unchanged.
+
 ## 3.0.4
 
 ### Changed

@@ -24,7 +24,8 @@ class _ScannerHomeScreenState extends State<ScannerHomeScreen> {
   int _noOfPages = 100;
   ScannerSource _scannerSource = ScannerSource.cameraAndGallery;
   AndroidScannerMode _androidScannerMode = AndroidScannerMode.full;
-  IosDocumentFilter _iosDefaultFilter = IosDocumentFilter.original;
+  DocumentFilter _captureFilter = DocumentFilter.original;
+  DocumentFilter _iosDefaultFilter = DocumentFilter.original;
   bool _iosShowFilterBar = true;
 
   @override
@@ -200,14 +201,38 @@ class _ScannerHomeScreenState extends State<ScannerHomeScreen> {
           Padding(
             padding:
                 const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: DropdownButtonFormField<IosDocumentFilter>(
+            child: DropdownButtonFormField<DocumentFilter>(
+              decoration: InputDecoration(
+                labelText: strings.captureFilter,
+                border: OutlineInputBorder(),
+              ),
+              initialValue: _captureFilter,
+              items: DocumentFilter.values.map((filter) {
+                return DropdownMenuItem<DocumentFilter>(
+                  value: filter,
+                  child: Text(filter.name),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _captureFilter = value;
+                  });
+                }
+              },
+            ),
+          ),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: DropdownButtonFormField<DocumentFilter>(
               decoration: InputDecoration(
                 labelText: strings.iosFilter,
                 border: OutlineInputBorder(),
               ),
               initialValue: _iosDefaultFilter,
-              items: IosDocumentFilter.values.map((filter) {
-                return DropdownMenuItem<IosDocumentFilter>(
+              items: DocumentFilter.values.map((filter) {
+                return DropdownMenuItem<DocumentFilter>(
                   value: filter,
                   child: Text(filter.name),
                 );
@@ -294,6 +319,7 @@ class _ScannerHomeScreenState extends State<ScannerHomeScreen> {
               isGalleryImportAllowed: _isGalleryImportAllowed,
               androidScannerMode: _androidScannerMode,
               asPdf: _asPdf,
+              captureFilter: _captureFilter,
               iosScannerOptions: IosScannerOptions(
                 imageFormat: IosImageFormat.jpg,
                 jpgCompressionQuality: 0.5,
