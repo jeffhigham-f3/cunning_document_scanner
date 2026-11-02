@@ -52,6 +52,9 @@ struct CunningScannerOptions {
     /// Whether the filter selector is shown in the custom cropper.
     let showFilterBar: Bool
 
+    /// The filter applied to every page the document camera returns.
+    let captureFilter: DocumentFilter
+
     /// Creates scanner options with default settings.
     init() {
         self.imageFormat = .png
@@ -62,6 +65,7 @@ struct CunningScannerOptions {
         self.noOfPages = 100
         self.defaultFilter = .original
         self.showFilterBar = true
+        self.captureFilter = .original
     }
 
     /// Creates scanner options with specified settings.
@@ -73,7 +77,8 @@ struct CunningScannerOptions {
         scannerSource: CunningScannerSource,
         noOfPages: Int = 100,
         defaultFilter: DocumentFilter = .original,
-        showFilterBar: Bool = true
+        showFilterBar: Bool = true,
+        captureFilter: DocumentFilter = .original
     ) {
         self.imageFormat = imageFormat
         self.jpgCompressionQuality = jpgCompressionQuality
@@ -83,6 +88,7 @@ struct CunningScannerOptions {
         self.noOfPages = noOfPages
         self.defaultFilter = defaultFilter
         self.showFilterBar = showFilterBar
+        self.captureFilter = captureFilter
     }
 
     /// Factory method to build a CunningScannerOptions object from incoming Flutter MethodChannel arguments.
@@ -94,6 +100,7 @@ struct CunningScannerOptions {
         let asPdf = (arguments["asPdf"] as? Bool) ?? false
         let isGalleryImportAllowed = (arguments["isGalleryImportAllowed"] as? Bool) ?? false
         let noOfPages = (arguments["noOfPages"] as? Int) ?? 100
+        let captureFilterName = (arguments["captureFilter"] as? String) ?? "original"
         let sourceString = arguments["scannerSource"] as? String
         let fallbackSource: CunningScannerSource = isGalleryImportAllowed ? .cameraAndGallery : .camera
         let scannerSource = CunningScannerSource(rawValue: sourceString ?? "") ?? fallbackSource
@@ -112,7 +119,8 @@ struct CunningScannerOptions {
             scannerSource: scannerSource,
             noOfPages: noOfPages,
             defaultFilter: DocumentFilter(methodChannelValue: defaultFilterName),
-            showFilterBar: showFilterBar
+            showFilterBar: showFilterBar,
+            captureFilter: DocumentFilter(methodChannelValue: captureFilterName)
         )
     }
 }
