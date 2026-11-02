@@ -1,4 +1,4 @@
-import 'ios_document_filter.dart';
+import 'document_filter.dart';
 import 'ios_image_format.dart';
 
 /// Different options that modify the behavior of the document scanner on iOS.
@@ -21,7 +21,7 @@ final class IosScannerOptions {
   IosScannerOptions({
     this.imageFormat = IosImageFormat.png,
     this.jpgCompressionQuality = 1.0,
-    this.defaultFilter = IosDocumentFilter.original,
+    this.defaultFilter = DocumentFilter.original,
     this.showFilterBar = true,
   }) {
     if (jpgCompressionQuality < 0.0 || jpgCompressionQuality > 1.0) {
@@ -48,8 +48,9 @@ final class IosScannerOptions {
   /// The filter preselected for every page in the custom cropper.
   ///
   /// Only applies to images imported from the gallery, which go through the
-  /// plugin's own cropper. Defaults to [IosDocumentFilter.original].
-  final IosDocumentFilter defaultFilter;
+  /// plugin's own cropper. Camera captures use the `captureFilter` argument of
+  /// `getPictures` instead. Defaults to [DocumentFilter.original].
+  final DocumentFilter defaultFilter;
 
   /// Whether the user may change the filter from the cropper.
   ///

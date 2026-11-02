@@ -12,47 +12,6 @@ protocol CunningDocumentCropperDelegate: AnyObject {
     func didCancelCropping()
 }
 
-/// Available image filter modes for scanned document pages.
-enum DocumentFilter: Int, CaseIterable {
-    case original = 0
-    case color = 1
-    case grayscale = 2
-    case blackAndWhite = 3
-    
-    var titleKey: String {
-        switch self {
-        case .original: return "cunning_document_scanner_filter_original"
-        case .color: return "cunning_document_scanner_filter_color"
-        case .grayscale: return "cunning_document_scanner_filter_grayscale"
-        case .blackAndWhite: return "cunning_document_scanner_filter_bw"
-        }
-    }
-    
-    var defaultTitle: String {
-        switch self {
-        case .original: return "Original"
-        case .color: return "Color"
-        case .grayscale: return "Grayscale"
-        case .blackAndWhite: return "B&W"
-        }
-    }
-
-    /// The identifier used on the Dart method channel.
-    var methodChannelValue: String {
-        switch self {
-        case .original: return "original"
-        case .color: return "color"
-        case .grayscale: return "grayscale"
-        case .blackAndWhite: return "blackAndWhite"
-        }
-    }
-
-    /// Builds a filter from its Dart method channel identifier, falling back to `.original`.
-    init(methodChannelValue: String) {
-        self = DocumentFilter.allCases.first { $0.methodChannelValue == methodChannelValue } ?? .original
-    }
-}
-
 /// View controller that provides an interactive multi-page document cropping interface.
 /// It displays selected images and overlays draggable handles to correct perspective skewing.
 class CunningDocumentCropperViewController: UIViewController {
@@ -105,7 +64,7 @@ class CunningDocumentCropperViewController: UIViewController {
     /// The activity spinner shown during background image loading/processing.
     private let activityIndicator = UIActivityIndicatorView(style: .large)
     
-    /// The CoreImage context used to execute perspective correction filters.
+    /// The CoreImage context used to execute the perspective correction.
     private let ciContext = CIContext(options: nil)
     
     /// A structure representing normalized corner coordinates of a page (0.0 to 1.0, bottom-left origin).
@@ -374,7 +333,7 @@ class CunningDocumentCropperViewController: UIViewController {
         let filterToApply = filter
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let filtered = self.applyFilter(filterToApply, to: currentImage)
+            let filtered = DocumentFilterRenderer.shared.apply(filterToApply, to: currentImage)
             DispatchQueue.main.async {
                 guard self.currentIndex < self.images.count else { return }
                 self.imageView.image = filtered
@@ -444,7 +403,7 @@ class CunningDocumentCropperViewController: UIViewController {
                 }
                 
                 self.currentNormalizedImage = resolvedImage
-                let filteredPreview = self.applyFilter(currentFilter, to: resolvedImage)
+                let filteredPreview = DocumentFilterRenderer.shared.apply(currentFilter, to: resolvedImage)
                 self.imageView.image = filteredPreview
                 
                 self.activityIndicator.stopAnimating()
@@ -617,7 +576,7 @@ class CunningDocumentCropperViewController: UIViewController {
                 baseImage = fixed ?? currentImage
             }
             
-            let finalImage = self.applyFilter(currentFilter, to: baseImage)
+            let finalImage = DocumentFilterRenderer.shared.apply(currentFilter, to: baseImage)
             
             DispatchQueue.main.async {
                 self.cancelButton.isEnabled = true
@@ -648,7 +607,7 @@ class CunningDocumentCropperViewController: UIViewController {
             self.images[currentIndex] = rotated
             self.currentNormalizedImage = rotated
             let currentFilter = self.selectedFilters[self.currentIndex]
-            self.imageView.image = self.applyFilter(currentFilter, to: rotated)
+            self.imageView.image = DocumentFilterRenderer.shared.apply(currentFilter, to: rotated)
             
             // Rotate the normalized coordinates 90 degrees clockwise:
             // x' = y
@@ -720,55 +679,5 @@ class CunningDocumentCropperViewController: UIViewController {
         guard let cgImage = self.ciContext.createCGImage(outputImage, from: outputImage.extent) else { return nil }
         
         return UIImage(cgImage: cgImage)
-    }
-    
-    /// Applies the requested DocumentFilter to an image using CoreImage filters.
-    private func applyFilter(_ filter: DocumentFilter, to image: UIImage) -> UIImage {
-        guard filter != .original else { return image }
-        guard let ciImage = CIImage(image: image) ?? (image.cgImage != nil ? CIImage(cgImage: image.cgImage!) : nil) else {
-            return image
-        }
-        
-        let outputCIImage: CIImage
-        switch filter {
-        case .original:
-            return image
-        case .color:
-            if let colorFilter = CIFilter(name: "CIColorControls") {
-                colorFilter.setValue(ciImage, forKey: kCIInputImageKey)
-                colorFilter.setValue(1.15, forKey: kCIInputContrastKey)
-                colorFilter.setValue(1.2, forKey: kCIInputSaturationKey)
-                colorFilter.setValue(0.03, forKey: kCIInputBrightnessKey)
-                outputCIImage = colorFilter.outputImage ?? ciImage
-            } else {
-                outputCIImage = ciImage
-            }
-        case .grayscale:
-            if let monoFilter = CIFilter(name: "CIPhotoEffectMono") {
-                monoFilter.setValue(ciImage, forKey: kCIInputImageKey)
-                outputCIImage = monoFilter.outputImage ?? ciImage
-            } else if let colorFilter = CIFilter(name: "CIColorControls") {
-                colorFilter.setValue(ciImage, forKey: kCIInputImageKey)
-                colorFilter.setValue(0.0, forKey: kCIInputSaturationKey)
-                outputCIImage = colorFilter.outputImage ?? ciImage
-            } else {
-                outputCIImage = ciImage
-            }
-        case .blackAndWhite:
-            if let colorFilter = CIFilter(name: "CIColorControls") {
-                colorFilter.setValue(ciImage, forKey: kCIInputImageKey)
-                colorFilter.setValue(0.0, forKey: kCIInputSaturationKey)
-                colorFilter.setValue(1.8, forKey: kCIInputContrastKey)
-                colorFilter.setValue(0.05, forKey: kCIInputBrightnessKey)
-                outputCIImage = colorFilter.outputImage ?? ciImage
-            } else {
-                outputCIImage = ciImage
-            }
-        }
-        
-        guard let cgImage = self.ciContext.createCGImage(outputCIImage, from: outputCIImage.extent) else {
-            return image
-        }
-        return UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
     }
 }

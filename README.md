@@ -200,6 +200,23 @@ Configure where images are acquired from using the `scannerSource` parameter:
    );
 ```
 
+### Capture Filter (Cross-Platform)
+
+Neither Apple's document camera nor Google's ML Kit scanner lets an app preset the filter shown in its UI, so by default every scan opens in colour and the user picks a filter by hand each time. `captureFilter` applies the filter you want to every page the camera flows return, after the platform's own crop and after whatever the user chose in the system camera:
+
+```dart
+   final imagesPath = await CunningDocumentScanner.getPictures(
+      captureFilter: DocumentFilter.blackAndWhite,
+   );
+```
+
+The filters are `original` (the default: the captured bytes exactly as the scanner wrote them), `color`, `grayscale` and `blackAndWhite`. Black and white flattens the page's lighting against a blurred copy of itself before thresholding, so shadows and faded paper come out as a uniform background.
+
+On Android the filter also covers gallery imports, whose cropper has no filter of its own. On iOS gallery imports go through the plugin's cropper and use `IosScannerOptions.defaultFilter` instead (see [Cropper Filters](#cropper-filters)). With `asPdf` on Android, a filtered scan is built from the filtered pages rather than from ML Kit's own PDF.
+
+> [!NOTE]
+> The live preview and the filter buttons of the system camera cannot be changed. If the user picks a filter there, `captureFilter` is applied on top of it. On Android, `AndroidScannerMode.base` hides ML Kit's filter tools altogether.
+
 ### Android Specific
 
 There are some features in Android that allow you to adjust the scanner that will be ignored in iOS:
@@ -238,14 +255,14 @@ Images imported from the gallery go through the plugin's own cropper, which offe
    final imagesPath = await CunningDocumentScanner.getPictures(
       scannerSource: ScannerSource.gallery,
       iosScannerOptions: IosScannerOptions(
-         defaultFilter: IosDocumentFilter.blackAndWhite,
+         defaultFilter: DocumentFilter.blackAndWhite,
          showFilterBar: false, // every page keeps defaultFilter
       ),
    );
 ```
 
 > [!NOTE]
-> These options only affect the plugin's cropper. The system document camera (`VNDocumentCameraViewController`) applies its own processing and VisionKit exposes no scanner mode or filter toggle for it.
+> These options only affect the plugin's cropper. The system document camera (`VNDocumentCameraViewController`) applies its own processing and VisionKit exposes no scanner mode or filter toggle for it; use [`captureFilter`](#capture-filter-cross-platform) to filter what it returns.
 
 ## Customization
 

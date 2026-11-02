@@ -399,6 +399,12 @@ public class CunningDocumentScannerPlugin: NSObject,
     // MARK: - VNDocumentCameraViewControllerDelegate
 
     /// Delegate callback for camera scans. Receives pages and processes them up to scannerOptions.noOfPages.
+    ///
+    /// The document camera applies its own crop and whatever filter the user chose in
+    /// its UI, and exposes no way to preset that filter. The requested `captureFilter`
+    /// is therefore applied here, to the pages it hands back, before they are written.
+    /// Rendering runs off the main queue; the pending result stays held until it ends,
+    /// which the `ALREADY_ACTIVE` guard already accounts for.
     public func documentCameraViewController(
         _ controller: VNDocumentCameraViewController,
         didFinishWith scan: VNDocumentCameraScan
@@ -408,8 +414,10 @@ public class CunningDocumentScannerPlugin: NSObject,
         for i in 0 ..< maxPages {
             images.append(scan.imageOfPage(at: i))
         }
-        processSelectedImages(images)
         presentingController?.dismiss(animated: true)
+        DocumentFilterRenderer.shared.render(scannerOptions.captureFilter, to: images) { [weak self] rendered in
+            self?.processSelectedImages(rendered)
+        }
     }
 
     /// Delegate callback for cancelled camera scans.
