@@ -214,6 +214,21 @@ The filters are `original` (the default: the captured bytes exactly as the scann
 
 On Android the filter also covers gallery imports, whose cropper has no filter of its own. On iOS gallery imports go through the plugin's cropper and use `IosScannerOptions.defaultFilter` instead (see [Cropper Filters](#cropper-filters)). With `asPdf` on Android, a filtered scan is built from the filtered pages rather than from ML Kit's own PDF.
 
+A filter never fails a scan. A page the filter cannot be applied to (it will not decode, a write fails, or memory runs out) is returned as the scanner wrote it. To know which pages those were, use `scan()`, which returns the same pages with `filterApplied` on each:
+
+```dart
+   final result = await CunningDocumentScanner.scan(
+      captureFilter: DocumentFilter.blackAndWhite,
+   );
+   for (final page in result?.pages ?? const []) {
+      if (!page.filterApplied) {
+         // page.path is the unfiltered page; convert it yourself if you need to.
+      }
+   }
+```
+
+On Android a page over 16 million pixels is decoded scaled to just under that size before filtering (a fraction, not a power of two), so the filter's memory is bounded by one page bitmap; every common phone frame is below the cap and untouched.
+
 > [!NOTE]
 > The live preview and the filter buttons of the system camera cannot be changed. If the user picks a filter there, `captureFilter` is applied on top of it. On Android, `AndroidScannerMode.base` hides ML Kit's filter tools altogether.
 

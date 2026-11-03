@@ -1,3 +1,12 @@
+## 3.1.1
+
+### Added
+* **`scan()` says which pages the filter reached.** `CunningDocumentScanner.scan` takes the same arguments as `getPictures` and returns a `ScanResult` whose pages each carry `filterApplied`. A page the filter could not be applied to is returned as the scanner wrote it and marked `false`, so an app that converts images itself can tell which pages still need it. `getPictures` is unchanged and still returns the paths.
+
+### Fixed
+* **A page that fails to filter no longer fails the scan on Android.** One page's decode, filter or write error used to fail the whole ML Kit scan, and the fallback cropper likewise; running out of memory was not caught at all. Each page is now filtered on its own, any failure (including `OutOfMemoryError`) returns that page unfiltered, and the rewritten JPEG is written to a temp file and renamed over the original so a failed write can never truncate a page.
+* **Black and white on a large Android page no longer needs seven page-sized buffers.** The page is filtered in place a stripe of rows at a time against one small background plane, so the only page-sized allocation is the bitmap itself. A page over 16 million pixels (`PageFilterMath.MAX_FILTER_PIXELS`, above every common phone frame) is decoded scaled to just under that cap first, by a fraction rather than a power of two, so a 4032x3024 page is untouched and a larger one keeps most of its size.
+
 ## 3.1.0
 
 ### Added
