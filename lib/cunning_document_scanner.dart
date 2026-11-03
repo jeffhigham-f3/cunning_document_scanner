@@ -7,4 +7,5 @@ export 'src/exceptions.dart';
 export 'src/ios_document_filter.dart';
 export 'src/ios_image_format.dart';
 export 'src/ios_scanner_options.dart';
+export 'src/scan_result.dart';
 export 'src/scanner_source.dart';

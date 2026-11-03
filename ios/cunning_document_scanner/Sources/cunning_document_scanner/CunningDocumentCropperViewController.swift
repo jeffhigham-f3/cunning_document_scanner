@@ -6,7 +6,9 @@ import CoreImage
 protocol CunningDocumentCropperDelegate: AnyObject {
     /// Called when the user has successfully finished cropping all selected images.
     /// - Parameter croppedImages: An array of final cropped and perspective-corrected images.
-    func didFinishCropping(croppedImages: [UIImage])
+    /// - Parameter unfilteredIndices: The indices whose chosen filter could not be applied; those
+    ///   images are the cropped page without it.
+    func didFinishCropping(croppedImages: [UIImage], unfilteredIndices: Set<Int>)
     
     /// Called when the user cancels the cropping flow.
     func didCancelCropping()
@@ -24,6 +26,7 @@ class CunningDocumentCropperViewController: UIViewController {
     
     /// The array of output cropped images populated during the flow.
     private var croppedImages: [UIImage] = []
+    private var unfilteredIndices = Set<Int>()
     
     /// The index of the current page being cropped.
     private var currentIndex = 0
@@ -576,7 +579,8 @@ class CunningDocumentCropperViewController: UIViewController {
                 baseImage = fixed ?? currentImage
             }
             
-            let finalImage = DocumentFilterRenderer.shared.apply(currentFilter, to: baseImage)
+            let rendered = DocumentFilterRenderer.shared.render(currentFilter, to: baseImage)
+            let finalImage = rendered ?? baseImage
             
             DispatchQueue.main.async {
                 self.cancelButton.isEnabled = true
@@ -586,13 +590,19 @@ class CunningDocumentCropperViewController: UIViewController {
                 self.backButton.isEnabled = true
                 self.activityIndicator.stopAnimating()
                 
+                if rendered == nil {
+                    self.unfilteredIndices.insert(self.croppedImages.count)
+                }
                 self.croppedImages.append(finalImage)
                 
                 self.currentIndex += 1
                 if self.currentIndex < self.images.count {
                     self.loadCurrentImage()
                 } else {
-                    self.delegate?.didFinishCropping(croppedImages: self.croppedImages)
+                    self.delegate?.didFinishCropping(
+                        croppedImages: self.croppedImages,
+                        unfilteredIndices: self.unfilteredIndices
+                    )
                 }
             }
         }

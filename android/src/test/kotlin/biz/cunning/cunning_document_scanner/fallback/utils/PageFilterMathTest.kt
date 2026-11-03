@@ -99,4 +99,51 @@ class PageFilterMathTest {
         assertEquals(29, PageFilterMath.luminance(rgb(0, 0, 255)))
         assertEquals(255, PageFilterMath.luminance(rgb(255, 255, 255)))
     }
+
+    @Test
+    fun `scaleFor leaves a page at or under the cap alone`() {
+        assertEquals(1f, PageFilterMath.scaleFor(4032, 3024, 16_000_000), 0f)
+        assertEquals(1f, PageFilterMath.scaleFor(4000, 4000, 16_000_000), 0f)
+    }
+
+    @Test
+    fun `scaleFor lands a page over the cap just under it, not at a quarter`() {
+        val scale = PageFilterMath.scaleFor(5000, 4000, 16_000_000)
+
+        val scaledPixels = (5000 * scale).toLong() * (4000 * scale).toLong()
+        assertTrue("scaled to $scaledPixels", scaledPixels <= 16_000_000L)
+        assertTrue("scale $scale is too coarse", scale > 0.85f)
+    }
+
+    @Test
+    fun `binarizing stripe by stripe matches the whole page pass`() {
+        val width = 64
+        val height = 50
+        val pixels =
+            IntArray(width * height) { i ->
+                val x = i % width
+                val paper = 220 - (130 * x) / (width - 1)
+                val ink = x == 16 || x == 17 || x == 48 || x == 49
+                val v = if (ink) paper / 4 else paper
+                rgb(v, v, v)
+            }
+        val expected = PageFilterMath.binarize(pixels, width, height)
+
+        for (stripeRows in intArrayOf(7, 8, 64)) {
+            val background =
+                PageFilterMath.backgroundFromStripes(width, height, stripeRows) { y0, rows, stripe ->
+                    System.arraycopy(pixels, y0 * width, stripe, 0, rows * width)
+                }
+            val page = pixels.copyOf()
+            var y0 = 0
+            while (y0 < height) {
+                val rows = minOf(stripeRows, height - y0)
+                val stripe = page.copyOfRange(y0 * width, (y0 + rows) * width)
+                PageFilterMath.binarizeStripe(stripe, width, y0, rows, background)
+                System.arraycopy(stripe, 0, page, y0 * width, rows * width)
+                y0 += rows
+            }
+            assertArrayEquals("stripe height $stripeRows", expected, page)
+        }
+    }
 }

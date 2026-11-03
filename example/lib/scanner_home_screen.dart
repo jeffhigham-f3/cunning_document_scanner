@@ -17,6 +17,7 @@ class ScannerHomeScreen extends StatefulWidget {
 
 class _ScannerHomeScreenState extends State<ScannerHomeScreen> {
   List<String> _pictures = [];
+  Set<String> _unfilteredPictures = {};
   bool _asPdf = false;
   bool _isPdfResult = false;
   bool _isGalleryImportAllowed = false;
@@ -303,33 +304,49 @@ class _ScannerHomeScreenState extends State<ScannerHomeScreen> {
                 ),
               )
           else
-            for (var picture in _pictures) Image.file(File(picture))
+            for (var picture in _pictures)
+              Column(
+                children: [
+                  if (_unfilteredPictures.contains(picture))
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(strings.unfilteredPage,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error)),
+                    ),
+                  Image.file(File(picture)),
+                ],
+              )
         ],
       )),
     );
   }
 
   void onPressed() async {
-    List<String> pictures;
+    ScanResult? result;
     try {
-      pictures = await CunningDocumentScanner.getPictures(
-              noOfPages: _noOfPages,
-              scannerSource: _useScannerSource ? _scannerSource : null,
-              // ignore: deprecated_member_use
-              isGalleryImportAllowed: _isGalleryImportAllowed,
-              androidScannerMode: _androidScannerMode,
-              asPdf: _asPdf,
-              captureFilter: _captureFilter,
-              iosScannerOptions: IosScannerOptions(
-                imageFormat: IosImageFormat.jpg,
-                jpgCompressionQuality: 0.5,
-                defaultFilter: _iosDefaultFilter,
-                showFilterBar: _iosShowFilterBar,
-              )) ??
-          [];
+      result = await CunningDocumentScanner.scan(
+          noOfPages: _noOfPages,
+          scannerSource: _useScannerSource ? _scannerSource : null,
+          // ignore: deprecated_member_use
+          isGalleryImportAllowed: _isGalleryImportAllowed,
+          androidScannerMode: _androidScannerMode,
+          asPdf: _asPdf,
+          captureFilter: _captureFilter,
+          iosScannerOptions: IosScannerOptions(
+            imageFormat: IosImageFormat.jpg,
+            jpgCompressionQuality: 0.5,
+            defaultFilter: _iosDefaultFilter,
+            showFilterBar: _iosShowFilterBar,
+          ));
       if (!mounted) return;
+      final pages = result?.pages ?? const <ScannedDocumentPage>[];
       setState(() {
-        _pictures = pictures;
+        _pictures = [for (final page in pages) page.path];
+        _unfilteredPictures = {
+          for (final page in pages)
+            if (!page.filterApplied) page.path
+        };
         _isPdfResult = _asPdf;
       });
     } on ArgumentError catch (exception) {

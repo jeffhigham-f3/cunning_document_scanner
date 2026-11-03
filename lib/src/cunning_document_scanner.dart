@@ -6,6 +6,7 @@ import 'android_scanner_mode.dart';
 import 'document_filter.dart';
 import 'exceptions.dart';
 import 'ios_scanner_options.dart';
+import 'scan_result.dart';
 import 'scanner_source.dart';
 
 /// A class that provides a simple way to scan documents.
@@ -13,6 +14,33 @@ class CunningDocumentScanner {
   /// The method channel used to interact with the native platform.
   static const MethodChannel _channel =
       MethodChannel('cunning_document_scanner');
+
+  /// Starts the document scanning process and returns the page paths.
+  ///
+  /// The paths-only form of [scan]; a page the filter could not be applied to
+  /// is included like any other. Returns `null` when the user cancels.
+  static Future<List<String>?> getPictures({
+    int noOfPages = 100,
+    @Deprecated('Use scannerSource instead')
+    bool isGalleryImportAllowed = false,
+    ScannerSource? scannerSource,
+    AndroidScannerMode androidScannerMode = AndroidScannerMode.full,
+    IosScannerOptions? iosScannerOptions,
+    bool asPdf = false,
+    DocumentFilter captureFilter = DocumentFilter.original,
+  }) async {
+    final result = await scan(
+      noOfPages: noOfPages,
+      // ignore: deprecated_member_use_from_same_package
+      isGalleryImportAllowed: isGalleryImportAllowed,
+      scannerSource: scannerSource,
+      androidScannerMode: androidScannerMode,
+      iosScannerOptions: iosScannerOptions,
+      asPdf: asPdf,
+      captureFilter: captureFilter,
+    );
+    return result?.paths;
+  }
 
   /// Starts the document scanning process.
   ///
@@ -50,7 +78,7 @@ class CunningDocumentScanner {
   /// Throws an [ArgumentError] if [noOfPages] is less than or equal to 0.
   /// Throws a [CunningDocumentScannerException] if camera permission is denied
   /// (with `code` `'permission_denied'`) or a scanning error occurs.
-  static Future<List<String>?> getPictures({
+  static Future<ScanResult?> scan({
     int noOfPages = 100,
     @Deprecated('Use scannerSource instead')
     bool isGalleryImportAllowed = false,
@@ -73,9 +101,10 @@ class CunningDocumentScanner {
             ? ScannerSource.cameraAndGallery
             : ScannerSource.camera);
 
-    final List<dynamic>? pictures;
+    final Map<Object?, Object?>? pictures;
     try {
-      pictures = await _channel.invokeMethod<List<dynamic>>('getPictures', {
+      pictures =
+          await _channel.invokeMethod<Map<Object?, Object?>>('getPictures', {
         'noOfPages': noOfPages,
         'isGalleryImportAllowed': isGalleryImportAllowed,
         'scannerSource': resolvedSource.methodChannelValue,
@@ -94,12 +123,11 @@ class CunningDocumentScanner {
       );
     }
 
-    // Android historically reported cancellation as an empty list while iOS
+    // Android historically reported cancellation as an empty result while iOS
     // reported null. Both are normalized to null here.
-    if (pictures == null || pictures.isEmpty) {
-      return null;
-    }
-    return pictures.map((e) => e as String).toList();
+    if (pictures == null) return null;
+    final result = ScanResult.fromChannel(pictures);
+    return result.pages.isEmpty ? null : result;
   }
 
   /// Clears the temporary scanned images and generated PDF files this plugin created.

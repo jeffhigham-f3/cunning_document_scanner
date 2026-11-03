@@ -327,7 +327,7 @@ class CunningDocumentScannerPlugin :
                 val pdfUri = scanningResult.pdf?.uri
                 if (pdfUri != null) {
                     val pdfFile = FileUtil().movePdfToScanStorage(context, pdfUri)
-                    resolve(listOf(pdfFile.absolutePath))
+                    resolve(FilterOutcome.allApplied(listOf(pdfFile.absolutePath)).toChannelMap())
                 } else {
                     fail("ERROR", "No PDF returned from ML Kit scanner")
                 }
@@ -339,7 +339,7 @@ class CunningDocumentScannerPlugin :
                     FileUtil().movePageToScanStorage(context, page.imageUri, index)
                 }
             if (filter == DocumentFilter.ORIGINAL) {
-                resolve(pageFiles.map { it.absolutePath })
+                resolve(FilterOutcome.allApplied(pageFiles.map { it.absolutePath }).toChannelMap())
                 return
             }
             filterPagesThenResolve(pageFiles, filter, asPdf)
@@ -349,11 +349,13 @@ class CunningDocumentScannerPlugin :
     }
 
     // / Applies the requested filter to each moved page off the main thread, then
-    // / resolves with the page paths, or with one PDF built from the filtered pages.
+    // / resolves with the page paths, or with one PDF built from the filtered pages,
+    // / naming the pages the filter could not be applied to.
     // /
-    // / ML Kit's own PDF cannot be filtered after the fact, so when a filter is
-    // / requested the scan asks ML Kit for JPEG pages and builds the PDF here, the
-    // / same way the fallback scanner already does for `asPdf`.
+    // / A page that fails to filter comes back as the scanner wrote it; a filter
+    // / never fails the scan. ML Kit's own PDF cannot be filtered after the fact, so
+    // / when a filter is requested the scan asks ML Kit for JPEG pages and builds
+    // / the PDF here, the same way the fallback scanner already does for `asPdf`.
     private fun filterPagesThenResolve(
         pageFiles: List<File>,
         filter: DocumentFilter,
@@ -367,24 +369,24 @@ class CunningDocumentScannerPlugin :
 
         filterExecutor.execute {
             // `Result` in this file is Flutter's MethodChannel.Result, so Kotlin's is named in full.
-            val outcome: kotlin.Result<List<String>> =
+            val outcome: kotlin.Result<FilterOutcome> =
                 try {
-                    pageFiles.forEach { PageFilter().applyToFile(it, filter) }
+                    val pages = pageFiles.map { it.absolutePath to PageFilter().applyToFile(it, filter) }
                     if (asPdf && currentActivity != null) {
                         val pdfFile = FileUtil().createPdfFile(currentActivity)
                         FileUtil().convertImagesToPdf(pageFiles.map { it.absolutePath }, pdfFile)
                         pageFiles.forEach { it.delete() }
-                        kotlin.Result.success(listOf(pdfFile.absolutePath))
+                        kotlin.Result.success(FilterOutcome.of(pages, pdfPath = pdfFile.absolutePath))
                     } else {
-                        kotlin.Result.success(pageFiles.map { it.absolutePath })
+                        kotlin.Result.success(FilterOutcome.of(pages))
                     }
                 } catch (e: Exception) {
                     kotlin.Result.failure(e)
                 }
             mainHandler.post {
                 outcome
-                    .onSuccess { resolve(it) }
-                    .onFailure { fail("ERROR", "Failed to filter ML Kit scanner output: ${it.message}") }
+                    .onSuccess { resolve(it.toChannelMap()) }
+                    .onFailure { fail("ERROR", "Failed to build the PDF from the scanned pages: ${it.message}") }
             }
         }
     }
@@ -412,6 +414,12 @@ class CunningDocumentScannerPlugin :
         }
 
         val successResponse = croppedImageResults.map { it.removePrefix("file://") }
+        val unfiltered =
+            data.getStringArrayListExtra(DocumentScannerExtra.EXTRA_UNFILTERED_IMAGE_RESULTS)
+                .orEmpty()
+                .map { it.removePrefix("file://") }
+                .toSet()
+        val pages = successResponse.map { it to (it !in unfiltered) }
 
         if (asPdf) {
             val currentActivity = activity
@@ -423,12 +431,12 @@ class CunningDocumentScannerPlugin :
                 val pdfFile = FileUtil().createPdfFile(currentActivity)
                 FileUtil().convertImagesToPdf(successResponse, pdfFile)
                 successResponse.forEach { File(it).delete() }
-                resolve(listOf(pdfFile.absolutePath))
+                resolve(FilterOutcome.of(pages, pdfPath = pdfFile.absolutePath).toChannelMap())
             } catch (e: Exception) {
                 fail("ERROR", "Failed to create PDF from fallback scanner: ${e.message}")
             }
         } else {
-            resolve(successResponse)
+            resolve(FilterOutcome.of(pages).toChannelMap())
         }
     }
 
