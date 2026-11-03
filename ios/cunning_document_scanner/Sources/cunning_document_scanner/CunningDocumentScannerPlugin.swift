@@ -342,8 +342,10 @@ public class CunningDocumentScannerPlugin: NSObject,
         channel(value)
     }
 
-    /// Writes scanned or cropped images to local files (or compiles them to a single PDF) and returns paths to Flutter.
-    func processSelectedImages(_ images: [UIImage]) {
+    /// Writes scanned or cropped images to local files (or compiles them to a single PDF) and returns
+    /// the paths to Flutter as `{paths, unfilteredPaths}`. `unfilteredIndices` names the pages the
+    /// capture filter could not be applied to; a PDF counts as unfiltered when any of its pages was.
+    func processSelectedImages(_ images: [UIImage], unfilteredIndices: Set<Int> = []) {
         let storageDir = getScanStorageDirectory()
         let currentDateTime = Date()
         let df = DateFormatter()
@@ -360,13 +362,14 @@ public class CunningDocumentScannerPlugin: NSObject,
             }
             let url = storageDir.appendingPathComponent("\(prefix)\(formattedDate).pdf")
             if pdfDocument.write(to: url) {
-                finish([url.path])
+                finish(Self.scanResult(paths: [url.path], unfilteredPaths: unfilteredIndices.isEmpty ? [] : [url.path]))
             } else {
                 let err = FlutterError(code: "ERROR", message: "Failed to generate PDF document", details: nil)
                 finish(err)
             }
         } else {
             var filenames: [String] = []
+            var unfilteredPaths: [String] = []
             do {
                 for (i, page) in images.enumerated() {
                     let ext = scannerOptions.imageFormat.rawValue
@@ -387,13 +390,21 @@ public class CunningDocumentScannerPlugin: NSObject,
                     // that were never created. They are surfaced as errors instead.
                     try imageData.write(to: url)
                     filenames.append(url.path)
+                    if unfilteredIndices.contains(i) {
+                        unfilteredPaths.append(url.path)
+                    }
                 }
             } catch {
                 finish(FlutterError(code: "ERROR", message: error.localizedDescription, details: nil))
                 return
             }
-            finish(filenames)
+            finish(Self.scanResult(paths: filenames, unfilteredPaths: unfilteredPaths))
         }
+    }
+
+    /// The method-channel result: every page path, and the subset the filter was not applied to.
+    static func scanResult(paths: [String], unfilteredPaths: [String]) -> [String: Any] {
+        return ["paths": paths, "unfilteredPaths": unfilteredPaths]
     }
 
     // MARK: - VNDocumentCameraViewControllerDelegate
@@ -415,8 +426,8 @@ public class CunningDocumentScannerPlugin: NSObject,
             images.append(scan.imageOfPage(at: i))
         }
         presentingController?.dismiss(animated: true)
-        DocumentFilterRenderer.shared.render(scannerOptions.captureFilter, to: images) { [weak self] rendered in
-            self?.processSelectedImages(rendered)
+        DocumentFilterRenderer.shared.render(scannerOptions.captureFilter, to: images) { [weak self] rendered, unfiltered in
+            self?.processSelectedImages(rendered, unfilteredIndices: unfiltered)
         }
     }
 
@@ -539,9 +550,9 @@ extension CunningDocumentScannerPlugin: UIPopoverPresentationControllerDelegate 
 extension CunningDocumentScannerPlugin: CunningDocumentCropperDelegate {
     
     /// Handles completion of cropping flow. Passes cropped results to the file output processor.
-    func didFinishCropping(croppedImages: [UIImage]) {
+    func didFinishCropping(croppedImages: [UIImage], unfilteredIndices: Set<Int>) {
         rootViewController?.dismiss(animated: true) {
-            self.processSelectedImages(croppedImages)
+            self.processSelectedImages(croppedImages, unfilteredIndices: unfilteredIndices)
         }
     }
     

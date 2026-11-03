@@ -99,29 +99,35 @@ final class DocumentFilterRenderer {
     }
 
     /// Applies `filter` to every image, one at a time on a background queue, and hands
-    /// the results to `completion` on the main queue in the same order. A page that
-    /// fails to render is passed through unfiltered. `.original` completes at once with
-    /// the same array, untouched.
+    /// the results to `completion` on the main queue in the same order, with the indices
+    /// of the pages that failed to render and were passed through unfiltered. `.original`
+    /// completes at once with the same array, untouched, and no failures.
     func render(
         _ filter: DocumentFilter,
         to images: [UIImage],
-        completion: @escaping ([UIImage]) -> Void
+        completion: @escaping ([UIImage], Set<Int>) -> Void
     ) {
         guard filter != .original, !images.isEmpty else {
-            completion(images)
+            completion(images, [])
             return
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
             var rendered: [UIImage] = []
+            var unfiltered = Set<Int>()
             rendered.reserveCapacity(images.count)
-            for image in images {
+            for (index, image) in images.enumerated() {
                 autoreleasepool {
-                    rendered.append(self.apply(filter, to: image))
+                    if let output = self.render(filter, to: image) {
+                        rendered.append(output)
+                    } else {
+                        rendered.append(image)
+                        unfiltered.insert(index)
+                    }
                 }
             }
             DispatchQueue.main.async {
-                completion(rendered)
+                completion(rendered, unfiltered)
             }
         }
     }
