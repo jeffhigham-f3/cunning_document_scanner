@@ -26,6 +26,102 @@ object PageFilterMath {
     // / the page's. The estimate is a blur anyway, so the lost detail is intended.
     const val BACKGROUND_SCALE = 8
 
+    // / Pages with more pixels than this are decoded smaller before filtering, so a
+    // / single page bitmap bounds the memory a filter needs. Above every common
+    // / phone frame (a 12 MP camera is 4032x3024), so those pages are untouched.
+    const val MAX_FILTER_PIXELS = 16_000_000L
+
+    // / Rows a page is read and written in while filtering a file, so the Java heap
+    // / holds one stripe rather than a page-sized array.
+    const val STRIPE_ROWS = 256
+
+    // / The paper background of a page, blurred, at `BACKGROUND_SCALE` resolution.
+    class BackgroundPlane internal constructor(
+        internal val blurred: IntArray,
+        internal val smallWidth: Int,
+    )
+
+    // / The factor to decode a `width` x `height` page at so it holds at most
+    // / `maxPixels`: 1 when it already does, otherwise a fraction just under the
+    // / cap, never a power-of-two step down.
+    fun scaleFor(
+        width: Int,
+        height: Int,
+        maxPixels: Long,
+    ): Float {
+        val pixels = width.toLong() * height.toLong()
+        if (pixels <= maxPixels) return 1f
+        val exact = Math.sqrt(maxPixels.toDouble() / pixels.toDouble())
+        // Rounding of each edge can push the product back over the cap; step down a
+        // thousandth at a time until it is under.
+        var scale = exact
+        while ((width * scale).toLong() * (height * scale).toLong() > maxPixels) {
+            scale -= 0.001
+        }
+        return scale.toFloat()
+    }
+
+    // / Builds the background estimate from a page read `stripeRows` rows at a time
+    // / through `readStripe(y0, rows, buffer)`, so the page is never held whole.
+    fun backgroundFromStripes(
+        width: Int,
+        height: Int,
+        stripeRows: Int,
+        readStripe: (y0: Int, rows: Int, buffer: IntArray) -> Unit,
+    ): BackgroundPlane {
+        val smallWidth = (width + BACKGROUND_SCALE - 1) / BACKGROUND_SCALE
+        val smallHeight = (height + BACKGROUND_SCALE - 1) / BACKGROUND_SCALE
+        val sums = LongArray(smallWidth * smallHeight)
+        val counts = IntArray(smallWidth * smallHeight)
+        val stripe = IntArray(width * stripeRows)
+        var y0 = 0
+        while (y0 < height) {
+            val rows = minOf(stripeRows, height - y0)
+            readStripe(y0, rows, stripe)
+            for (r in 0 until rows) {
+                val sy = (y0 + r) / BACKGROUND_SCALE
+                for (x in 0 until width) {
+                    val index = sy * smallWidth + x / BACKGROUND_SCALE
+                    sums[index] += luminance(stripe[r * width + x])
+                    counts[index]++
+                }
+            }
+            y0 += rows
+        }
+        val small = IntArray(sums.size) { (sums[it] / counts[it]).toInt() }
+        val radius = blurRadius(width, height)
+        return BackgroundPlane(boxBlur(small, smallWidth, smallHeight, radius), smallWidth)
+    }
+
+    // / Thresholds `rows` rows of the page starting at `y0`, held in `stripe`, in
+    // / place, against `background`. Pairs with `backgroundFromStripes`.
+    fun binarizeStripe(
+        stripe: IntArray,
+        width: Int,
+        y0: Int,
+        rows: Int,
+        background: BackgroundPlane,
+    ) {
+        for (r in 0 until rows) {
+            val sy = (y0 + r) / BACKGROUND_SCALE
+            for (x in 0 until width) {
+                val i = r * width + x
+                val paper = background.blurred[sy * background.smallWidth + x / BACKGROUND_SCALE].coerceAtLeast(1)
+                val ink = luminance(stripe[i]).toFloat() / paper.toFloat() < INK_THRESHOLD
+                val v = if (ink) 0 else 255
+                stripe[i] = argb(alpha(stripe[i]), v, v, v)
+            }
+        }
+    }
+
+    private fun blurRadius(
+        width: Int,
+        height: Int,
+    ): Int =
+        (maxOf(width, height) * BACKGROUND_RADIUS_FRACTION / BACKGROUND_SCALE)
+            .toInt()
+            .coerceAtLeast(1)
+
     // / Returns a copy of the pixels with contrast and saturation raised.
     fun enhanceColor(pixels: IntArray): IntArray =
         IntArray(pixels.size) { i ->
@@ -85,11 +181,7 @@ object PageFilterMath {
         val smallHeight = (height + BACKGROUND_SCALE - 1) / BACKGROUND_SCALE
         val small = downscale(luma, width, height, smallWidth, smallHeight)
 
-        val radius =
-            (maxOf(width, height) * BACKGROUND_RADIUS_FRACTION / BACKGROUND_SCALE)
-                .toInt()
-                .coerceAtLeast(1)
-        val blurred = boxBlur(small, smallWidth, smallHeight, radius)
+        val blurred = boxBlur(small, smallWidth, smallHeight, blurRadius(width, height))
 
         return IntArray(width * height) { i ->
             val x = (i % width) / BACKGROUND_SCALE

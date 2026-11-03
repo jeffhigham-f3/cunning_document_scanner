@@ -416,6 +416,7 @@ class DocumentScannerActivity : AppCompatActivity() {
             val result =
                 try {
                     val croppedImageResults = arrayListOf<String>()
+                    val unfilteredImageResults = arrayListOf<String>()
                     for ((pageNumber, document) in pages.withIndex()) {
                         val croppedImage =
                             ImageUtil().crop(document.originalPhotoFilePath, document.corners)
@@ -423,14 +424,18 @@ class DocumentScannerActivity : AppCompatActivity() {
 
                         File(document.originalPhotoFilePath).delete()
 
-                        val filteredImage = PageFilter().apply(croppedImage, captureFilter)
+                        // A filter that fails on this page (an error, or no memory for
+                        // it) leaves the cropped page as it is; the scan still succeeds.
+                        val filteredImage = filterOrNull(croppedImage)
                         val croppedImageFile = FileUtil().createImageFile(this, pageNumber)
-                        filteredImage.saveToFile(croppedImageFile, croppedImageQuality)
-                        if (filteredImage != croppedImage) filteredImage.recycle()
+                        (filteredImage ?: croppedImage).saveToFile(croppedImageFile, croppedImageQuality)
+                        if (filteredImage != null && filteredImage != croppedImage) filteredImage.recycle()
                         croppedImage.recycle()
-                        croppedImageResults.add(Uri.fromFile(croppedImageFile).toString())
+                        val uri = Uri.fromFile(croppedImageFile).toString()
+                        croppedImageResults.add(uri)
+                        if (filteredImage == null) unfilteredImageResults.add(uri)
                     }
-                    Result.success(croppedImageResults)
+                    Result.success(croppedImageResults to unfilteredImageResults)
                 } catch (exception: Exception) {
                     Result.failure(exception)
                 }
@@ -439,10 +444,12 @@ class DocumentScannerActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 setBusy(false)
                 result
-                    .onSuccess {
+                    .onSuccess { (cropped, unfiltered) ->
                         setResult(
                             Activity.RESULT_OK,
-                            Intent().putExtra("croppedImageResults", it),
+                            Intent()
+                                .putExtra("croppedImageResults", cropped)
+                                .putExtra(DocumentScannerExtra.EXTRA_UNFILTERED_IMAGE_RESULTS, unfiltered),
                         )
                         finish()
                     }.onFailure {
@@ -451,6 +458,17 @@ class DocumentScannerActivity : AppCompatActivity() {
             }
         }
     }
+
+    // / The cropped page with the capture filter applied, or null when the filter
+    // / could not be applied to it.
+    private fun filterOrNull(croppedImage: Bitmap): Bitmap? =
+        try {
+            PageFilter().apply(croppedImage, captureFilter)
+        } catch (e: Exception) {
+            null
+        } catch (e: OutOfMemoryError) {
+            null
+        }
 
     override fun onDestroy() {
         imageExecutor.shutdown()

@@ -13,6 +13,10 @@ class DocumentScannerExtra {
         // / method channel value. Absent means the page is left as cropped.
         const val EXTRA_CAPTURE_FILTER = "captureFilter"
 
+        // / Result extra: the cropped image URIs the capture filter could not be
+        // / applied to (saved unfiltered). A subset of `croppedImageResults`.
+        const val EXTRA_UNFILTERED_IMAGE_RESULTS = "unfilteredImageResults"
+
         // / Intent extra key holding the gallery image URIs to crop, as an ArrayList<String>.
         const val EXTRA_IMAGE_URIS_TO_CROP = "imageUrisToCrop"
 
