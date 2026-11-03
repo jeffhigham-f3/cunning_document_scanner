@@ -52,7 +52,12 @@ void main() {
 
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         channel,
-        (MethodCall methodCall) => Future.value(result),
+        // The native side answers with the page paths and the subset the filter
+        // was not applied to; these tests only care about the paths.
+        (MethodCall methodCall) => Future.value(<String, Object?>{
+          'paths': result,
+          'unfilteredPaths': <String>[],
+        }),
       );
     }
 
@@ -83,7 +88,10 @@ void main() {
         (MethodCall methodCall) {
           passedAsPdf =
               (methodCall.arguments as Map)['asPdf'] as bool? ?? false;
-          return Future.value(fakeResult);
+          return Future.value(<String, Object?>{
+            'paths': fakeResult,
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
@@ -103,7 +111,10 @@ void main() {
         (MethodCall methodCall) {
           passedSource =
               (methodCall.arguments as Map)['scannerSource'] as String?;
-          return Future.value(fakeResult);
+          return Future.value(<String, Object?>{
+            'paths': fakeResult,
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
@@ -128,7 +139,10 @@ void main() {
         (MethodCall methodCall) {
           passedSource =
               (methodCall.arguments as Map)['scannerSource'] as String?;
-          return Future.value(fakeResult);
+          return Future.value(<String, Object?>{
+            'paths': fakeResult,
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
@@ -221,7 +235,10 @@ void main() {
         (MethodCall methodCall) {
           passedMode =
               (methodCall.arguments as Map)['androidScannerMode'] as String?;
-          return Future.value(<String>['fake_url']);
+          return Future.value(<String, Object?>{
+            'paths': <String>['fake_url'],
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
@@ -243,7 +260,10 @@ void main() {
         (MethodCall methodCall) {
           passedOptions = (methodCall.arguments as Map)['iosScannerOptions']
               as Map<dynamic, dynamic>?;
-          return Future.value(<String>['fake_url']);
+          return Future.value(<String, Object?>{
+            'paths': <String>['fake_url'],
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
@@ -273,7 +293,10 @@ void main() {
         (MethodCall methodCall) {
           passedFilter =
               (methodCall.arguments as Map)['captureFilter'] as String?;
-          return Future.value(<String>['fake_url']);
+          return Future.value(<String, Object?>{
+            'paths': <String>['fake_url'],
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
@@ -294,7 +317,10 @@ void main() {
         (MethodCall methodCall) {
           passedFilter =
               (methodCall.arguments as Map)['captureFilter'] as String?;
-          return Future.value(<String>['fake_url']);
+          return Future.value(<String, Object?>{
+            'paths': <String>['fake_url'],
+            'unfilteredPaths': <String>[],
+          });
         },
       );
 
